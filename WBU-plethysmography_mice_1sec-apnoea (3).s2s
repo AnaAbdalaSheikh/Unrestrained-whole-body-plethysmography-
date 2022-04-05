@@ -1,0 +1,378 @@
+var res%; 'Result view handle
+
+Var txt%; 'Text view handle
+
+Var Corl%; 'cross-correlation view handle
+
+var fileok%;
+
+View (app (3));
+WindowVisible (0);
+
+'setting toolbar buttons
+ToolbarSet (1,"DelChan",delchan%);
+ToolbarSet (2,"HideChan",hide%);
+ToolbarSet (3,"QuitScript",abort%);
+ToolbarSet (4,"GetFile",getdata%);
+ToolbarSet (5,"GetText",gettxt%);
+ToolbarSet (6,"Parameters",pntchan%);
+ToolbarSet (7,"GetApnoeas",getFixAp%);
+ToolbarSet (8,"ROI-1",ROI%);
+ToolbarSet (9,"ROI-2",ROI2%);
+ToolbarSet (10,"Print",Data%);
+
+Toolbar ("Copyright Ana Paula Abdala Sheikh, 2016", 1023);
+
+Halt;
+
+'Open an experiment file***********************************
+Func getdata%();
+res%:=FileOpen ("Y:\\Dose Response Curve\\BARN 1\\BARN 1 Coyle Mice\\*.smr",0,3);
+Window (0,0,70,100);
+fileok%:=1;
+View(res%);
+FontSet("Arial Narrow",8, 0);
+YAxisMode(8192, 1,12, 0);
+Return 1;
+End;
+
+'Open a text file*****************************
+Func gettxt%();
+
+var file%;
+
+file%:=Interact("Choose an option",1023,0,"New file","Existing file");
+
+if file%=1 then;
+    txt%:=FileNew(1,1);
+    Window (70,0,100,100);
+    endif;
+    
+if file%=2 then;    
+    txt%:=FileOpen ("",1,1);
+    Window (70,0,100,100);
+    endif
+
+fileok%:=1;
+Return 1;
+End;
+
+'Point to the TE channel to be used for apnoea count*****************************************************
+
+Var TE%; 'holds TE channel number
+Var cutoff; 'holds threshold for apnoea count
+
+Func pntchan%();
+View(res%); 'Point to the result view
+var ok%;
+
+DlgCreate("Choose parameters for analysis");  'Start new dialog
+DlgAllow(1023);
+DlgChan(1,"Channel containing TE values",64);
+DlgReal(2,"Count apnoeas ≥ (sec)",0.000,10.000);
+DlgButton(0,"Cancel");
+DlgButton(1,"OK");
+ok% := DlgShow(TE%,cutoff);
+If ok%=0 then
+	Message("Cancelled!");
+	return 1;
+Endif
+
+Do%();
+
+return 1
+end
+
+Func Do%();
+
+if TE%>0 then ChanSelect(TE%,1);
+endif
+
+if TE%=0 then Message("You need a TE channel for this analysis");
+	return 1;
+Endif
+
+Return 1;
+End
+
+'import to a new memory channel all the apnoeas that are longer than the user-defined time
+
+var chanApFix%, chApFix%;
+
+Func getFixAp%();
+
+View(res%); 'Point to the result view
+
+if TE%=0 then Message("You need a TE channel for this analysis");
+	return 1;
+Endif
+
+if TE%>0 then
+    
+    WindowVisible(0);
+
+    HCursorDelete(-1);
+    HCursorNew(1, 0.0); ' place a horizontal cursor on zero flow
+    HCursorLabel(1);
+    HCursorNew(TE%, cutoff); ' place a horizontal cursor on the user-defined threshold for apnoea count
+    HCursorLabel(1);
+    
+    CursorDelete(-1);
+    CursorSet(0);
+    CursorNew();
+    CursorNew();
+    CursorLabel(2);
+    
+    CursorActive(0,7, TE%, 0.001, "", "", "HCursor(2)", 0, 0);   'Rising threshold
+    CursorActive(1,14, TE%, "Cursor(0)-0.001", "MaxTime()", "", 1);   'Data points
+    
+    MeasureX(102, 0, "Cursor(0)", "0"); 'finding rising thresholds as defined by the user
+    MeasureY(100, TE%, "Cursor(1)", "0"); 'finding actual TE datapoints so that apnoea length can also be recorded
+    chanApFix%:=MeasureToChan(0, Print$("Apnoea≥%.3fs",cutoff), 7, 7, TE%, 0.001, "HCursor(2)", 0, 1, "", 0);
+    Process(0.0, View(-1).MaxTime(), 1, 1, chanApFix%);
+    Yield(0,1023);
+    chApFix%:=ChanSave(chanApFix%, 0);
+    DrawMode(chApFix%,3,3, 0,1); 'Set Waveform
+    MarkShow(chApFix%, 0, 0); 'Set marker to display and mode
+    YRange(chApFix%,0,3);
+    ChanHide(chanApFix%);
+    ChanShow(chApFix%);
+    
+    WindowVisible(1);
+    
+endif
+
+return 1
+end
+
+'set cursors to analyse region of interest (ROI-1)
+Func ROI%();
+
+View (res%);
+
+XRange(0, MaxTime());
+Optimise(-1);
+FrontView(res%);
+
+CursorDelete(-1);
+CursorNew();
+CursorNew();
+CursorNew();
+CursorNew();
+CursorNew();
+CursorNew();
+CursorActive(0,0);   'Static
+CursorActive(1,16, 0, "Cursor(0)+600");   'Expression
+CursorActive(2,16, 0, "Cursor(1)+600");   'Expression
+CursorActive(3,16, 0, "Cursor(2)+600");   'Expression
+CursorActive(4,16, 0, "Cursor(3)+600");   'Expression
+CursorActive(5,16, 0, "Cursor(4)+600");   'Expression
+CursorActive(6,16, 0, "Cursor(5)+600");   'Expression
+CursorLabel(4,0,"START");
+Cursor(0,1200);
+CursorVisible(-1,1);
+CursorVisible(0,1);
+
+Return 1;
+End
+
+'set cursors to analyse region of interest (ROI-2)
+Func ROI2%();
+
+View (res%);
+
+XRange(0, MaxTime());
+Optimise(-1);
+FrontView(res%);
+
+CursorDelete(-1);
+CursorNew();
+CursorNew();
+CursorNew();
+CursorNew();
+CursorNew();
+CursorNew();
+CursorActive(0,0);   'Static
+CursorActive(1,16, 0, "Cursor(0)+600");   'Expression
+CursorActive(2,16, 0, "Cursor(1)+600");   'Expression
+CursorActive(3,16, 0, "Cursor(2)+600");   'Expression
+CursorActive(4,16, 0, "Cursor(3)+600");   'Expression
+CursorActive(5,16, 0, "Cursor(4)+600");   'Expression
+CursorActive(6,16, 0, "Cursor(5)+600");   'Expression
+Cursor(0,6600);
+CursorVisible(-1,1);
+CursorVisible(0,1);
+CursorLabel(4,0,"START");
+
+Return 1;
+End
+
+' Calculate and print mean, standard deviation (SD), coeficient of variation (CV) and apnoea counts for ROI
+Func Data%();
+
+View(res%); 'Point to the result view
+
+var StartTime;
+var EndTime;
+
+var epoch1; 'define the variables that will hold length of apnoea
+var epoch2;
+var epoch3;
+var epoch4;
+var epoch5;
+var epoch6;
+var epochall;
+
+var epoch1SD; 'define the variables that will hold SD for length of apnoea
+var epoch2SD;
+var epoch3SD;
+var epoch4SD;
+var epoch5SD;
+var epoch6SD;
+var epochallSD;
+
+var epoch1CV; 'define the variables that will hold CV for length of apnoea
+var epoch2CV;
+var epoch3CV;
+var epoch4CV;
+var epoch5CV;
+var epoch6CV;
+var epochallCV;
+
+var num1;  'define variables that will hold the counts of apnoeas
+var num2;
+var num3;
+var num4;
+var num5;
+var num6;
+var numall;
+
+StartTime:=Cursor(0);
+Endtime:=Cursor(6);
+
+epoch1:=ChanMeasure(chApFix%,2,Cursor(0),Cursor(1)); 'get mean between cursor 0 and 1
+epoch2:=ChanMeasure(chApFix%,2,Cursor(1),Cursor(2));
+epoch3:=ChanMeasure(chApFix%,2,Cursor(2),Cursor(3));
+epoch4:=ChanMeasure(chApFix%,2,Cursor(3),Cursor(4));
+epoch5:=ChanMeasure(chApFix%,2,Cursor(4),Cursor(5));
+epoch6:=ChanMeasure(chApFix%,2,Cursor(5),Cursor(6));
+epochall:=ChanMeasure(chApFix%,2,Cursor(0),Cursor(6));
+
+epoch1SD:=ChanMeasure(chApFix%,12,Cursor(0),Cursor(1)); 'get SD between cursor 0 and 1
+epoch2SD:=ChanMeasure(chApFix%,12,Cursor(1),Cursor(2));
+epoch3SD:=ChanMeasure(chApFix%,12,Cursor(2),Cursor(3));
+epoch4SD:=ChanMeasure(chApFix%,12,Cursor(3),Cursor(4));
+epoch5SD:=ChanMeasure(chApFix%,12,Cursor(4),Cursor(5));
+epoch6SD:=ChanMeasure(chApFix%,12,Cursor(5),Cursor(6));
+epochallSD:=ChanMeasure(chApFix%,12,Cursor(0),Cursor(6));
+
+if epoch1>0 then epoch1CV:=epoch1SD/epoch1; 
+endif
+
+if epoch2>0 then epoch2CV:=epoch2SD/epoch2;
+endif
+
+if epoch3>0 then epoch3CV:=epoch3SD/epoch3;
+endif
+
+if epoch4>0 then epoch4CV:=epoch4SD/epoch4;
+endif
+
+if epoch5>0 then epoch5CV:=epoch5SD/epoch5;
+endif
+
+if epoch6>0 then epoch6CV:=epoch6SD/epoch6;
+endif
+
+if epochall>0 then epochallCV:=epochallSD/epochall;
+endif
+
+num1:=Count(chApFix%,Cursor (0), Cursor(1)); ' count events between 2 cursors
+num2:=Count(chApFix%,Cursor (1), Cursor(2));
+num3:=Count(chApFix%,Cursor (2), Cursor(3));
+num4:=Count(chApFix%,Cursor (3), Cursor(4));
+num5:=Count(chApFix%,Cursor (4), Cursor(5));
+num6:=Count(chApFix%,Cursor (5), Cursor(6));
+numall:=Count(chApFix%,Cursor (0), Cursor(6));
+
+if txt%=0 then
+    Message("Open a text file using the script button");
+    return 1;
+ Endif
+
+if txt%>0 then
+    
+    
+    View(txt%);
+    
+    Print("\n Counted apnoea ≥ %.3f sec",cutoff);
+    Print("\n Channel analysed",TE%);
+    
+    Print ("\nStart (s) = ", StartTime);
+    Print ("End (s) = ", EndTime);
+    
+    Print ("\nApnoea\nLength\t\tmin10\tmin20\tmin30\tmin40\tmin50\tmin60\thour\n");
+    
+    Print ("Mean(s)\t\t%.3f",epoch1); 
+    Print ("\t%.3f", epoch2);
+    Print ("\t%.3f", epoch3);
+    Print ("\t%.3f", epoch4);
+    Print ("\t%.3f", epoch5);
+    Print ("\t%.3f", epoch6);
+    Print ("\t%.3f", epochall); 
+    
+    Print ("\nSD\t\t%.3f",epoch1SD);
+    Print ("\t%.3f", epoch2SD);
+    Print ("\t%.3f", epoch3SD);
+    Print ("\t%.3f", epoch4SD);
+    Print ("\t%.3f", epoch5SD);
+    Print ("\t%.3f", epoch6SD);
+    Print ("\t%.3f", epochallSD);
+    
+    Print ("\nCV\t\t%.3f",epoch1CV);
+    Print ("\t%.3f", epoch2CV);
+    Print ("\t%.3f", epoch3CV);
+    Print ("\t%.3f", epoch4CV);
+    Print ("\t%.3f", epoch5CV);
+    Print ("\t%.3f", epoch6CV);
+    Print ("\t%.3f", epochallCV);
+        
+    Print ("\nCount\t\t",num1,"\t",num2,"\t",num3,"\t",num4,"\t",num5,"\t",num6,"\t",numall);
+    
+endif
+
+Return 1;
+End
+
+
+'Hide selected channels*******************************
+Func hide%();
+
+View(Res%); 'Point to the result view
+ChanHide (-3);
+
+fileok%:=1;
+Return 1
+End
+
+'Delete selected channels*******************************
+Func delchan%();
+
+View(Res%); 'Point to the result view
+ChanDelete (-3,1);
+
+fileok%:=1;
+Return 1
+End
+
+'Stop running script*********************************************
+
+Func abort%();
+if fileok%=1 and res%>0 and txt%>0 then 
+View (res%);
+FileClose();    
+View (txt%);
+FileClose();
+Endif;
+Halt;
+End

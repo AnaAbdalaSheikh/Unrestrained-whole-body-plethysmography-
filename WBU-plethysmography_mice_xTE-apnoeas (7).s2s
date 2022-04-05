@@ -1,0 +1,638 @@
+Var res%; 'Result view handle
+
+Var txt%; 'Text view handle
+
+var fileok%;
+
+View (app (3));
+WindowVisible (0);
+
+'setting toolbar buttons
+ToolbarSet (1,"Delete",delchan%);
+ToolbarSet (2,"Hide",hide%);
+ToolbarSet (3,"Quit",abort%);
+Toolbarset (4,"SaveChan",save%);
+ToolbarSet (5,"GetText",gettxt%);
+ToolbarSet (6,"GetFile",getdata%);
+ToolbarSet (7,"Parameters",Dialog%);
+ToolbarSet (8, "Cursors",getcur%);
+ToolbarSet (9,"Get TE",TE%);
+ToolbarSet (10,"Delete TE",TEdel%);
+ToolbarSet (11,"BrowseTE",BrowseTE%);
+ToolbarSet (12,"MeanTE per min",MeanTE%);
+ToolbarSet (13,"Apnoeas",Apnoea%);
+ToolbarSet (14,"Browse Apnoeas",Browse%);
+ToolbarSet (15,"Remove Apnoeas",Remove%);
+ToolbarSet (16,"ROI-1",ROI%);
+ToolbarSet (17,"ROI-2",ROI2%);
+ToolbarSet (18,"Print",Data%);
+ToolbarSet (19,"Browse Deleted Apnoea", Browsedel%);
+
+
+Toolbar ("IP: Ana Paula Abdala Sheikh, 2015", 1023);
+
+Halt;
+
+'Open an experiment file***********************************
+
+Func getdata%();
+
+var err%;
+var import%;
+var done$;
+
+import%:=Interact("Choose an option",1023,0,"Spike file","Import file");
+
+if import%=1 then;
+    res%:=FileOpen ("",0,3);
+    Window (0,0,70,100);
+    
+    Fix%();
+    
+    endif
+
+if import%=2 then;
+    done$:=FileConvert$("*.edf","",2,err%,"dll=edf;AppVer=Spike,802");
+    Yield(0);
+    if err%=0 then
+    res%:=FileOpen (done$,0,3);
+    Window (0,0,70,100);
+        
+    Fix%();
+        
+    endif
+    
+ endif
+
+Return 1;
+End;
+
+var filename1$;
+
+Func Fix%(); ' changes the display configuration to save time
+
+if res%>0 then View (res%);
+
+Drawmode(2,14);
+XAxisStyle(2, 0, 0);
+XAxisAttrib(0);
+XRange(0, MaxTime());
+Optimise(-1);
+FrontView(res%);
+filename1$:=FileName$(0);
+    
+endif;
+
+Return 1;
+End;
+
+'Open a text file*****************************
+Func gettxt%();
+var file%;
+
+file%:=Interact("Choose an option",1023,0,"New file","Existing file");
+
+if file%=1 then;
+    txt%:=FileNew(1,1);
+    Window (70,0,100,100);
+    endif;
+    
+if file%=2 then;    
+    txt%:=FileOpen ("",1,1);
+    Window (70,0,100,100);
+    endif
+
+fileok%:=1;
+Return 1;
+End;
+
+'Hide selected channels*******************************
+Func hide%();
+
+View(Res%); 'Point to the result view
+ChanHide (-3);
+
+fileok%:=1;
+Return 1
+End
+
+'Delete selected channels*******************************
+Func delchan%();
+
+View(Res%); 'Point to the result view
+ChanDelete (-3,1);
+
+fileok%:=1;
+Return 1
+End
+
+'save selected memory channels**************************
+
+Func save%();
+
+View (res%);
+ChanSave(-3,0);
+Message("Done");
+
+Return 1
+End
+
+
+'Stop running script*********************************************
+
+Func abort%();
+
+Halt;
+End
+
+'Determine parameters for breath detection***********************
+
+var minstep:=0.05;   'minimum stepping for cursor zero - detection of PIF
+var amp:=3.00;       'amplitude for trough find in cursor zero - detection PIF
+var repol:=90;       '% repolarization value for start-I - detection of start of I
+var base:=0.00;      'baseline for zero flow - in case of bias flow offset
+var cutoff:=3;       'multiplication factor relative to minute average TE for apnoea detection
+
+Func Dialog%();
+var ok%;
+
+DlgCreate("Breath Detection Parameters");  'Start new dialog
+DlgReal(1,"Cursor zero stepping (s)",0.000,1.000);
+DlgReal(2,"Amplitude for trough find (mL/s)",0.000,10.000);
+DlgReal(3,"Repolarization(%) for start I",0,100);
+DlgReal(4,"Baseline offset (mL/s)",-1000.000,1000.000);
+DlgReal(5,"Apnoea = TE x",-10.00,10.00);
+DlgButton(0,"Cancel");
+DlgButton(1,"OK");
+ok%:= DlgShow(minstep,amp,repol,base,cutoff);
+
+If ok%=0 then
+    Message("Cancelled!");
+	return 1;
+Endif
+
+Do%();
+
+return 1
+end
+
+'Set cursors for breath detection*********************************
+
+Func getcur%();
+
+View(res%); 'Point to the result view
+
+HCursorDelete(-1);
+HCursorNew(1, 0.0); ' place a horizontal cursor on zero flow
+HCursorLabel(2);
+
+CursorDelete(-1);
+CursorVisible(0,1);
+CursorNew(); 'cursors for breath detection
+CursorNew();
+CursorNew();
+CursorNew();
+CursorNew();
+CursorNew();
+CursorNew();
+CursorLabel(4,0,"PIF");
+CursorLabel(4,4,"PIF");
+CursorLabel(4,5,"PEF2");
+CursorLabel(4,2,"START-I");
+CursorLabel(4,3,"END-I");
+CursorLabel(4,7,"END-E");
+CursorLabel(0,1);
+CursorLabel(0,6);
+
+Do%();
+
+return 1
+end
+
+' Set active cursors that interact with breath detection variables
+
+Func Do%();
+
+View(res%);
+
+CursorActive(0,5, 1, minstep, "", "", amp, 0, 0);   'Trough find
+CursorActive(1,7, 1, "Cursor(0)", "Cursor(0)-1", "", base, 0, 0);   'Rising threshold
+CursorActive(2,15, 1, "Cursor(0)", "Cursor(1)", "", 0, repol, 0, "Cursor(1)");   'Repolarisation %
+CursorActive(3,7, 1, "Cursor(0)", "Cursor(0)+1", "", base, 0, 0);   'Rising threshold
+CursorActive(4,5, 1, "Cursor(0)", "Cursor(0)+10", "", amp, 0, 0);   'Trough find
+CursorActive(5,1, 1, "Cursor(4)", "Cursor(3)", "");   'Maximum value
+CursorActive(6,7, 1, "Cursor(4)", "Cursor(4)-1", "", base, 0, 0);   'Rising threshold
+CursorActive(7,15, 1, "Cursor(4)", "Cursor(6)", "", 0, repol, 0, "Cursor(6)");   'Repolarisation %
+
+fileok%:=1;
+Return 1;
+End;
+
+' Create memory channel holding the values of TE (s)
+
+var mch1%, memIV%;
+
+Func TE% ();
+
+View(res%); 'Point to the result view
+WindowVisible(0);
+
+MeasureX(102, 1, "Cursor(3)", "0");
+MeasureY(103, 1, "Cursor(7)", "Cursor(3)");
+mch1% := MeasureToChan(0, "TE", 7,5, 1, minstep, amp, 0, 1, "", 0);
+Process(0.0, View(-1).MaxTime(), 1, 1, mch1%);
+
+memIV%:=MemChan(5,0); 'creates a new memory marker channel to hold deleted TE values
+ChanShow(memIV%);
+ChanTitle$(memIV%,"Del-TE");
+DrawMode(memIV%,2,0);'Set to lines draw mode
+
+WindowVisible(1);
+FrontView(res%);
+
+fileok%:=1;
+Return 1;
+End
+
+'create memory channel holding mean values of TE since the start of the file
+
+var mch2%;
+
+Func MeanTE% ();
+
+View(res%); 'Point to the result view
+WindowVisible(0);
+
+CursorDelete(-1);
+CursorVisible(0,1);
+CursorNew(); 'cursors for minute average detection
+CursorActive(0,14, 1, 60, "", "", 1);   'Data points
+CursorActive(1,16, 0, "Cursor(0)+60");   'Expression
+
+MeasureX(102, 1, "Cursor(0)", "0");
+MeasureY(2, mch1%, "Cursor(0)", "Cursor(1)");
+mch2%:= MeasureToChan(0, "Av.TE/min", 7,14, 1, 60, 1, 0, 1);
+Process(0.0, View(-1).MaxTime(), 1, 1, mch2%);
+DrawMode(mch2%,3,1, 0,3); 'Set Skyline
+
+WindowVisible(1);
+FrontView(res%);
+
+fileok%:=1;
+Return 1;
+End
+
+'Create channel for apnoeas: import all TE values, then delete TE values that are not apnoeas
+
+Var memI%, memII%, memIII%;
+
+Func Apnoea% ();
+
+View(res%); 'Point to the result view
+WindowVisible(0);
+
+var delete%;
+
+CursorDelete(-1);
+CursorVisible(0,1);
+CursorActive(0,14, mch1%, 0.001, "", "", 1);   'Data points
+
+memI%:=MemChan(ChanKind(mch1%),0); 'creates a new memory realmark channel to hold the apnoeas
+MemImport(memI%,mch1%,0,maxtime()); 'imports all the data from the TE channel to memI%
+
+memII%:=MemChan(5,0);   'creates a new memory marker channel to hold the start of TE marker
+MemImport(memII%,mch1%,0,maxtime()); 'imports all the marker placements from TE channel
+
+memIII%:=MemChan(5,0); 'creates a new memory marker channel to hold deleted apnoeas
+
+Doit%();
+
+ChanShow(memI%);
+ChanTitle$(memI%,"Apnoeas");
+DrawMode(memI%,3,4,0,1);'Set Realmark Waveform to dots
+ChanUnits$(memI%, "s");
+
+ChanShow(memII%);
+ChanTitle$(memII%,"Start-E");
+DrawMode(memII%,2,0);'Set to lines draw mode
+
+ChanShow(memIII%);
+ChanTitle$(memIII%,"Del-Apn");
+DrawMode(memIII%,2,0);'Set to lines draw mode
+
+XRange(0, MaxTime());
+Optimise(-1);
+
+WindowVisible(1);
+FrontView(res%);
+
+fileok%:=1;
+Return 1;
+End
+
+Func Doit%(); 'this next function finds TE values below a threshold and deletes them from the new
+                'memory channel
+
+Var time;
+Var TEvalue;
+Var MeanTEvalue;
+Var TEcrit;
+
+repeat
+
+    time:=NextTime(memII%,time); 'get time for next marker
+    TEvalue:=ChanValue(mch1%,time); ' measure TE value on this time
+    MeanTEvalue:=ChanValue(mch2%,time); 'measure meanTE value on this time
+    TEcrit:=MeanTEvalue*cutoff; 'stablish TE cut-off threshold, variable cutoff comes from dialog
+
+If time>0 and TEvalue<TEcrit then
+      MemDeleteTime(memI%,3, time-0.001, time+0.001); 'deletes item if it fits the condition above
+    Endif
+    
+Until Time<0;
+
+Return 1;
+End
+
+'Set cursor 0 to find apnoeas
+
+Func Browse%();
+
+View (res%);
+
+CursorDelete(-1);
+CursorVisible(0,1);
+CursorActive(0,14,memI%,0.01,"", "", 1); 'Data points
+CursorVisible(0,1);
+CursorLabel(1,0);
+Cursor(0,1200);
+
+Return 1
+End
+
+' Set cursor 0 to find TE datapoints
+
+Func BrowseTE%();
+
+View (res%);
+
+CursorDelete(-1);
+CursorVisible(0,1);
+CursorActive(0,14,mch1%,0.01,"", "", 1); 'Data points
+CursorVisible(0,1);
+CursorLabel(1,0);
+Cursor(0,1200);
+
+Return 1
+End
+
+'Set cursor O to find deleted apnoeas
+
+Func Browsedel%();
+
+View (res%);
+
+CursorDelete(-1);
+CursorVisible(0,1);
+CursorActive(0,14,memIII%,0.01,"", "", 1); 'Data points
+CursorVisible(0,1);
+CursorLabel(1,0);
+Cursor(0,1200);
+
+Return 1
+End
+
+'remove data points from the apnoea channel and add a mark to channel memIII% - will delete data points were cursor 0 is
+
+Func Remove%();
+
+View (res%);
+
+MemDeleteTime(memI%, 0, Cursor(0), 0.001); 'this deletes apnoeas from channel memI%
+MemSetItem(memIII%,0,Cursor(0)); 'this adds a datapoint to the deleted apnoea marker channel (memIII%)
+
+MemDeleteTime (mch1%, 0, Cursor(0), 0.001); 'this deletes datapoints from channel mch1% (TE values)
+MemSetItem(memIV%,0,Cursor(0)); 'this adds a datapoint to the deleted TE marker channel (memIV%)
+
+Return 1
+End
+
+'remove data points from the apnoea channel and add a mark to deleted channel (memIII%) - will delete data points were cursor 3 is
+
+Func TEdel%();
+
+View (res%);
+
+MemDeleteTime(mch1%, 0, Cursor(0), 0.001); 'this deletes TE datapoints from channel mch1% (TE values)
+MemSetItem(memIV%,0,Cursor(0)); 'this adds a datapoint to the deleted TE marker channel (memIV%)
+
+if memIII%>0 and memI%>0 then
+    MemDeleteTime (memI%, 0, Cursor(0), 0.001); 'this deletes apnoeas from channel memI% (deleted apnoea channel)
+    MemSetItem(memIII%,0,Cursor(0)); 'this adds a datapoint to the deleted apnoea marker channel (memIII%)
+endif
+
+Return 1
+End
+
+
+
+'set cursors to analyse region of interest (ROI-1)
+Func ROI%();
+
+View (res%);
+
+XRange(0, MaxTime());
+Optimise(-1);
+FrontView(res%);
+
+CursorDelete(-1);
+CursorNew();
+CursorNew();
+CursorNew();
+CursorNew();
+CursorNew();
+CursorNew();
+CursorActive(0,0);   'Static
+CursorActive(1,16, 0, "Cursor(0)+600");   'Expression
+CursorActive(2,16, 0, "Cursor(1)+600");   'Expression
+CursorActive(3,16, 0, "Cursor(2)+600");   'Expression
+CursorActive(4,16, 0, "Cursor(3)+600");   'Expression
+CursorActive(5,16, 0, "Cursor(4)+600");   'Expression
+CursorActive(6,16, 0, "Cursor(5)+600");   'Expression
+CursorVisible(-1,1);
+CursorLabel(4,0,"START");
+Cursor(0,1200);
+
+Return 1;
+End
+
+'set cursors to analyse region of interest (ROI-2)
+Func ROI2%();
+
+View (res%);
+
+XRange(0, MaxTime());
+Optimise(-1);
+FrontView(res%);
+
+CursorDelete(-1);
+CursorNew();
+CursorNew();
+CursorNew();
+CursorNew();
+CursorNew();
+CursorNew();
+CursorActive(0,0);   'Static
+CursorActive(1,16, 0, "Cursor(0)+600");   'Expression
+CursorActive(2,16, 0, "Cursor(1)+600");   'Expression
+CursorActive(3,16, 0, "Cursor(2)+600");   'Expression
+CursorActive(4,16, 0, "Cursor(3)+600");   'Expression
+CursorActive(5,16, 0, "Cursor(4)+600");   'Expression
+CursorActive(6,16, 0, "Cursor(5)+600");   'Expression
+CursorVisible(-1,1);
+CursorLabel(4,0,"START");
+Cursor(0,6600);
+
+Return 1;
+End
+
+' Calculate and print mean, standard deviation (SD), coeficient of variation (CV) and apnoea counts for ROI
+Func Data%();
+
+View(res%); 'Point to the result view
+
+var StartTime;
+var EndTime;
+
+var epoch1; 'define the variables that will hold length of apnoea
+var epoch2;
+var epoch3;
+var epoch4;
+var epoch5;
+var epoch6;
+var epochall;
+
+var epoch1SD; 'define the variables that will hold SD for length of apnoea
+var epoch2SD;
+var epoch3SD;
+var epoch4SD;
+var epoch5SD;
+var epoch6SD;
+var epochallSD;
+
+var epoch1CV; 'define the variables that will hold CV for length of apnoea
+var epoch2CV;
+var epoch3CV;
+var epoch4CV;
+var epoch5CV;
+var epoch6CV;
+var epochallCV;
+
+var num1;  'define variables that will hold the counts of apnoeas
+var num2;
+var num3;
+var num4;
+var num5;
+var num6;
+var numall;
+
+StartTime:=Cursor(0);
+Endtime:=Cursor(6);
+
+epoch1:=ChanMeasure(memI%,2,Cursor(0),Cursor(1)); 'get mean between cursor 0 and 1
+epoch2:=ChanMeasure(memI%,2,Cursor(1),Cursor(2));
+epoch3:=ChanMeasure(memI%,2,Cursor(2),Cursor(3));
+epoch4:=ChanMeasure(memI%,2,Cursor(3),Cursor(4));
+epoch5:=ChanMeasure(memI%,2,Cursor(4),Cursor(5));
+epoch6:=ChanMeasure(memI%,2,Cursor(5),Cursor(6));
+epochall:=ChanMeasure(memI%,2,Cursor(0),Cursor(6));
+
+epoch1SD:=ChanMeasure(memI%,12,Cursor(0),Cursor(1)); 'get SD between cursor 0 and 1
+epoch2SD:=ChanMeasure(memI%,12,Cursor(1),Cursor(2));
+epoch3SD:=ChanMeasure(memI%,12,Cursor(2),Cursor(3));
+epoch4SD:=ChanMeasure(memI%,12,Cursor(3),Cursor(4));
+epoch5SD:=ChanMeasure(memI%,12,Cursor(4),Cursor(5));
+epoch6SD:=ChanMeasure(memI%,12,Cursor(5),Cursor(6));
+epochallSD:=ChanMeasure(memI%,12,Cursor(0),Cursor(6));
+
+if epoch1>0 then epoch1CV:=epoch1SD/epoch1; 
+endif
+
+if epoch2>0 then epoch2CV:=epoch2SD/epoch2;
+endif
+
+if epoch3>0 then epoch3CV:=epoch3SD/epoch3;
+endif
+
+if epoch4>0 then epoch4CV:=epoch4SD/epoch4;
+endif
+
+if epoch5>0 then epoch5CV:=epoch5SD/epoch5;
+endif
+
+if epoch6>0 then epoch6CV:=epoch6SD/epoch6;
+endif
+
+if epochall>0 then epochallCV:=epochallSD/epochall;
+endif
+
+num1:=Count(memI%,Cursor (0), Cursor(1)); ' count events between 2 cursors
+num2:=Count(memI%,Cursor (1), Cursor(2));
+num3:=Count(memI%,Cursor (2), Cursor(3));
+num4:=Count(memI%,Cursor (3), Cursor(4));
+num5:=Count(memI%,Cursor (4), Cursor(5));
+num6:=Count(memI%,Cursor (5), Cursor(6));
+numall:=Count(memI%,Cursor (0), Cursor(6));
+
+if txt%=0 then
+    Message("Open a text file using the script button");
+    return 1;
+ Endif
+
+if txt%>0 then
+    
+    
+    View(txt%);
+    
+    Print("\n",filename1$);
+    Print("Parameters\nCursor zero stepping (s) = ",minstep);
+    Print("Amplitude for trough find (mL/s) = ",amp);
+    Print("Repolarization(%) for start I = ",repol);
+    Print("Baseline offset (mL/s) = ",base);
+    Print("Apnoea = TE x ",cutoff);  
+    
+    Print ("\nStart (s) = ", StartTime);
+    Print ("End (s) = ", EndTime);
+    
+    Print ("\nApnoea\nLength\t\tmin10\tmin20\tmin30\tmin40\tmin50\tmin60\thour\n");
+    
+    Print ("Mean(s)\t\t%.3f",epoch1); 
+    Print ("\t%.3f", epoch2);
+    Print ("\t%.3f", epoch3);
+    Print ("\t%.3f", epoch4);
+    Print ("\t%.3f", epoch5);
+    Print ("\t%.3f", epoch6);
+    Print ("\t%.3f", epochall); 
+    
+    Print ("\nSD\t\t%.3f",epoch1SD);
+    Print ("\t%.3f", epoch2SD);
+    Print ("\t%.3f", epoch3SD);
+    Print ("\t%.3f", epoch4SD);
+    Print ("\t%.3f", epoch5SD);
+    Print ("\t%.3f", epoch6SD);
+    Print ("\t%.3f", epochallSD);
+    
+    Print ("\nCV\t\t%.3f",epoch1CV);
+    Print ("\t%.3f", epoch2CV);
+    Print ("\t%.3f", epoch3CV);
+    Print ("\t%.3f", epoch4CV);
+    Print ("\t%.3f", epoch5CV);
+    Print ("\t%.3f", epoch6CV);
+    Print ("\t%.3f", epochallCV);
+        
+    Print ("\nCount\t\t",num1,"\t",num2,"\t",num3,"\t",num4,"\t",num5,"\t",num6,"\t",numall);
+    
+endif
+
+Return 1;
+End
